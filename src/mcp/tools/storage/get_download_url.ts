@@ -5,9 +5,12 @@ import { getDownloadUrl } from "../../../gcp/storage";
 import { Emulators } from "../../../emulator/types";
 
 export const get_object_download_url = tool(
+  "storage",
   {
     name: "get_object_download_url",
-    description: "Retrieves the download URL for an object in Firebase Storage.",
+    description:
+      "Use this to retrieve the download URL for an object in a Cloud Storage for Firebase bucket.",
+    humanReadableDescription: "Retrieve the download URL for an object in a Cloud Storage bucket.",
     inputSchema: z.object({
       bucket: z
         .string()

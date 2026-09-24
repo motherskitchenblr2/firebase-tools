@@ -7,6 +7,7 @@
 /scripts/webframeworks-deploy-tests/nextjs/**
 /src/frameworks/docs/**
 /prompts
+/.agent
 
 # Intentionally invalid YAML file:
 /src/test/fixtures/extension-yamls/invalid/extension.yaml

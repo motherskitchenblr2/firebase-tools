@@ -7,6 +7,7 @@ import * as client from "./client";
 import { FirebaseError } from "../error";
 import * as types from "./types";
 
+// eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-argument
 chai.use(require("chai-as-promised"));
 
 describe("client", () => {
@@ -124,6 +125,13 @@ describe("client", () => {
       expect(getStub).to.be.calledWith("projects/p/locations/l/services/s/schemas/main");
     });
 
+    it("getSchema with schemaId", async () => {
+      getStub.resolves({ body: { name: "schema" } });
+      const schema = await client.getSchema("projects/p/locations/l/services/s", "schemaId");
+      expect(schema).to.deep.equal({ name: "schema" });
+      expect(getStub).to.be.calledWith("projects/p/locations/l/services/s/schemas/schemaId");
+    });
+
     it("getSchema returns undefined if not found", async () => {
       getStub.rejects(new FirebaseError("err", { status: 404 }));
       const schema = await client.getSchema("projects/p/locations/l/services/s");
@@ -156,13 +164,36 @@ describe("client", () => {
         schemaToUpsert,
         { queryParams: { allowMissing: "true", validateOnly: "false" } },
       );
+      expect(pollOperationStub).to.be.calledWith({
+        apiOrigin: "https://firebasedataconnect.googleapis.com",
+        apiVersion: "v1",
+        operationResourceName: "op-name",
+        masterTimeout: 300000,
+      });
+    });
+
+    it("executeSchemaMigration", async () => {
+      postStub.resolves({ body: { name: "op-name" } });
+      pollOperationStub.resolves({ done: true });
+      await client.executeSchemaMigration("projects/p/locations/l/services/s", [
+        { sql: "ALTER TABLE...", description: "test", destructive: false },
+      ]);
+      expect(postStub).to.be.calledWith("projects/p/locations/l/services/s/schemas/main:migrate", {
+        diffs: [{ sql: "ALTER TABLE...", description: "test", destructive: false }],
+      });
+      expect(pollOperationStub).to.be.calledWith({
+        apiOrigin: "https://firebasedataconnect.googleapis.com",
+        apiVersion: "v1",
+        operationResourceName: "op-name",
+        masterTimeout: 300000,
+      });
     });
 
     it("deleteSchema", async () => {
       deleteStub.resolves({ body: { name: "op-name" } });
       pollOperationStub.resolves();
-      await client.deleteSchema("projects/p/locations/l/services/s");
-      expect(deleteStub).to.be.calledWith("projects/p/locations/l/services/s/schemas/main");
+      await client.deleteSchema("projects/p/locations/l/services/s/schemas/s");
+      expect(deleteStub).to.be.calledWith("projects/p/locations/l/services/s/schemas/s");
     });
   });
 
@@ -198,6 +229,12 @@ describe("client", () => {
         "projects/p/locations/l/services/s/connectors/c?allow_missing=true",
         connectorToUpsert,
       );
+      expect(pollOperationStub).to.be.calledWith({
+        apiOrigin: "https://firebasedataconnect.googleapis.com",
+        apiVersion: "v1",
+        operationResourceName: "op-name",
+        masterTimeout: 300000,
+      });
     });
 
     it("deleteConnector", async () => {

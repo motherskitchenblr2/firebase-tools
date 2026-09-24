@@ -11,6 +11,7 @@ import * as utils from "../utils";
 import { FirebaseProjectMetadata, CloudProjectInfo, ProjectPage } from "../types/project";
 import { bestEffortEnsure } from "../ensureApiEnabled";
 import { Options } from "../options";
+import { Constants } from "../emulator/constants";
 
 const TIMEOUT_MILLIS = 30000;
 const MAXIMUM_PROMPT_LIST = 100;
@@ -45,6 +46,9 @@ export async function promptProjectCreation(
           return "Project ID must be at least 6 characters long";
         } else if (projectId.length > 30) {
           return "Project ID cannot be longer than 30 characters";
+        }
+        if (Constants.isDemoProject(projectId)) {
+          return "Project ID cannot starts with demo-";
         }
 
         try {
@@ -172,7 +176,7 @@ export async function getOrPromptProject(
   return selectProjectInteractively();
 }
 
-async function selectProjectInteractively(
+export async function selectProjectInteractively(
   pageSize: number = MAXIMUM_PROMPT_LIST,
 ): Promise<FirebaseProjectMetadata> {
   const { projects, nextPageToken } = await getFirebaseProjectPage(pageSize);
@@ -182,15 +186,20 @@ async function selectProjectInteractively(
   if (nextPageToken) {
     // Prompt user for project ID if we can't list all projects in 1 page
     logger.debug(`Found more than ${projects.length} projects, selecting via prompt`);
-    return selectProjectByPrompting();
+    return await getFirebaseProject(await selectProjectByPrompting());
   }
   return selectProjectFromList(projects);
 }
 
-async function selectProjectByPrompting(): Promise<FirebaseProjectMetadata> {
+async function selectProjectByPrompting(): Promise<string> {
   const projectId = await prompt.input("Please input the project ID you would like to use:");
-
-  return await getFirebaseProject(projectId);
+  if (!projectId) {
+    throw new FirebaseError("Project ID cannot be empty");
+  }
+  if (Constants.isDemoProject(projectId)) {
+    throw new FirebaseError("Project ID cannot starts with demo-");
+  }
+  return projectId;
 }
 
 /**
@@ -251,10 +260,9 @@ export async function promptAvailableProjectId(): Promise<string> {
   }
 
   if (nextPageToken) {
-    // Prompt for project ID if we can't list all projects in 1 page
-    return await prompt.input(
-      "Please input the ID of the Google Cloud Project you would like to add Firebase:",
-    );
+    // Prompt user for project ID if we can't list all projects in 1 page
+    logger.debug(`Found more than ${projects.length} projects, selecting via prompt`);
+    return await selectProjectByPrompting();
   } else {
     const choices = projects
       .filter((p: CloudProjectInfo) => !!p)
@@ -321,6 +329,30 @@ export async function createCloudProject(
   }
 }
 
+interface HttpErrorContext {
+  body?: {
+    error?: {
+      details?: Array<{
+        detail?: unknown;
+      }>;
+    };
+  };
+}
+
+function isTosNotAcceptedError(err: unknown): boolean {
+  if (!(err instanceof FirebaseError) || !err.context) {
+    return false;
+  }
+  const context = err.context as HttpErrorContext;
+  const details = context.body?.error?.details;
+  if (!Array.isArray(details)) {
+    return false;
+  }
+  return details.some(
+    (d) => typeof d?.detail === "string" && d.detail.includes("Firebase Tos Not Accepted"),
+  );
+}
+
 /**
  * Send an API request to add Firebase to the Google Cloud Platform project and poll the LRO
  * to get the new Firebase project information.
@@ -344,6 +376,12 @@ export async function addFirebaseToCloudProject(
     return projectInfo;
   } catch (err: any) {
     logger.debug(err.message);
+    if (isTosNotAcceptedError(err)) {
+      throw new FirebaseError(
+        `Failed to add Firebase to Google Cloud Platform project ${clc.bold(projectId)} because your account has not accepted the Firebase Terms of Service. Please accept the Terms of Service in the Firebase console at ${api.consoleOrigin()} and try again.`,
+        { exit: 2, original: err },
+      );
+    }
     throw new FirebaseError(
       "Failed to add Firebase to Google Cloud Platform project. See firebase-debug.log for more info.",
       { exit: 2, original: err },

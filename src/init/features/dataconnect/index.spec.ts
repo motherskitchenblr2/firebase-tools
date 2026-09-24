@@ -8,6 +8,8 @@ import { Config } from "../../../config";
 import { RCData } from "../../../rc";
 import * as provison from "../../../dataconnect/provisionCloudSql";
 import * as cloudbilling from "../../../gcp/cloudbilling";
+import * as ensureApis from "../../../dataconnect/ensureApis";
+import * as client from "../../../dataconnect/client";
 
 const MOCK_RC: RCData = { projects: {}, targets: {}, etags: {} };
 
@@ -28,6 +30,8 @@ describe("init dataconnect", () => {
       ensureSyncStub = sandbox.stub(fs, "ensureFileSync");
       sdkActuateStub = sandbox.stub(sdk, "actuate").resolves();
       sandbox.stub(cloudbilling, "isBillingEnabled").resolves(true);
+      sandbox.stub(ensureApis, "ensureApis").resolves();
+      sandbox.stub(client, "listSchemas").resolves([]);
     });
 
     afterEach(() => {
@@ -50,6 +54,7 @@ describe("init dataconnect", () => {
         expectedSource: "dataconnect",
         expectedFiles: [
           "dataconnect/dataconnect.yaml",
+          "dataconnect/seed_data.gql",
           "dataconnect/schema/schema.gql",
           "dataconnect/example/connector.yaml",
           "dataconnect/example/queries.gql",
@@ -65,6 +70,7 @@ describe("init dataconnect", () => {
         expectedSource: "not-dataconnect",
         expectedFiles: [
           "not-dataconnect/dataconnect.yaml",
+          "not-dataconnect/seed_data.gql",
           // Populate the default template.
           "not-dataconnect/schema/schema.gql",
           "not-dataconnect/example/connector.yaml",
@@ -129,6 +135,7 @@ describe("init dataconnect", () => {
         expectedSource: "dataconnect",
         expectedFiles: [
           "dataconnect/dataconnect.yaml",
+          "dataconnect/seed_data.gql",
           "dataconnect/schema/schema.gql",
           "dataconnect/example/connector.yaml",
           "dataconnect/example/queries.gql",
@@ -240,12 +247,13 @@ function mockConfig(data: Record<string, any> = {}): Config {
 }
 function mockRequiredInfo(info: Partial<init.RequiredInfo> = {}): init.RequiredInfo {
   return {
-    analyticsFlow: "test",
+    flow: "test",
     appDescription: "",
     serviceId: "test-service",
     locationId: "europe-north3",
     cloudSqlInstanceId: "csql-instance",
     cloudSqlDatabase: "csql-db",
+    shouldProvisionCSQL: true,
     ...info,
   };
 }

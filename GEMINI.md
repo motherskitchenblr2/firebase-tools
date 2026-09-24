@@ -27,13 +27,16 @@ npm run format                   # Auto-fix formatting issues
 
 - **Look for existing utilities first:** Before writing common helper functions (e.g., for logging, file system operations, promises, string manipulation), check `src/utils.ts` to see if a suitable function already exists.
 - **Use the central `logger`** (`src/logger.ts`); never use `console.log()` for user-facing output.
-- **Throw `FirebaseError`** (`src/error.ts`) for expected, user-facing errors.
+- **Throw `FirebaseError`** (`src/error.ts`) for expected, user-facing errors. If the error is due to a violation of a precondition (e.g. something
+  that is null but should never be), specify a non-zero exit code.
 - **API calls must use `apiv2.ts`** for authenticated requests.
+- **Reduce nesting as much as possible:** Code should avoid unnecessarily deep nesting or long periods of nesting. Use early returns, `continue`, and `break` statements in functions and loops to handle edge cases early and keep main logic flat. Consider helper functions to encapsulate complex branching.
 
 ### TypeScript
 
 - **Never use `any` or `unknown` as an escape hatch.** Define proper interfaces/types or use type guards.
 - Use strict null checks and handle `undefined`/`null` explicitly.
+- **Prefer falsy checks over explicit boolean comparisons:** Use `!something` instead of `something === false` unless you explicitly need to distinguish between `false` and other falsy values like `undefined` or `null`.
 
 ### Testing
 

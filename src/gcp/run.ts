@@ -3,7 +3,7 @@ import { FirebaseError } from "../error";
 import { runOrigin } from "../api";
 import * as proto from "./proto";
 import * as iam from "./iam";
-import { backoff } from "../throttler/throttler";
+import { backoff } from "../utils";
 import { logger } from "../logger";
 import { listEntries, LogEntry } from "./cloudlogging";
 
@@ -358,8 +358,8 @@ export async function fetchServiceLogs(projectId: string, serviceId: string): Pr
   const order = "desc";
 
   try {
-    const entries = await listEntries(projectId, filter, pageSize, order);
-    return entries || [];
+    const { entries } = await listEntries(projectId, filter, pageSize, order);
+    return entries;
   } catch (err: any) {
     throw new FirebaseError(`Failed to fetch logs for Cloud Run service ${serviceId}`, {
       original: err,

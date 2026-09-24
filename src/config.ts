@@ -6,7 +6,6 @@ import * as _ from "lodash";
 import * as clc from "colorette";
 import * as fs from "fs-extra";
 import * as path from "path";
-const cjson = require("cjson");
 
 import { detectProjectRoot } from "./detectProjectRoot";
 import { FirebaseError } from "./error";
@@ -17,7 +16,6 @@ import * as utils from "./utils";
 import { getValidator, getErrorMessage } from "./firebaseConfigValidate";
 import { logger } from "./logger";
 import { loadCJSON } from "./loadCJSON";
-const parseBoltRules = require("./parseBoltRules");
 
 export class Config {
   static DEFAULT_FUNCTIONS_SOURCE = "functions";
@@ -34,6 +32,8 @@ export class Config {
     "remoteconfig",
     "dataconnect",
     "apphosting",
+    "auth",
+    "ailogic",
   ];
 
   public options: any;
@@ -69,7 +69,7 @@ export class Config {
     }
 
     // If a top-level key contains a string path pointing to a suported file
-    // type (JSON or Bolt), we read the file.
+    // type (JSON ), we read the file.
     //
     // TODO: This is janky and confusing behavior, we should remove it ASAP.
     Config.MATERIALIZE_TARGETS.forEach((target) => {
@@ -167,10 +167,9 @@ export class Config {
         return loadCJSON(fullPath);
       /* istanbul ignore-next */
       case ".bolt":
-        if (target === "database") {
-          this.notes.databaseRules = "bolt";
-        }
-        return parseBoltRules(fullPath);
+        throw new FirebaseError(
+          "As of firebase-tools@15.0.0, .bolt rules are no longer supported.",
+        );
       default:
         throw new FirebaseError(
           "Parse Error: " + filePath + " is not of a supported config file type",
@@ -212,7 +211,7 @@ export class Config {
     return outPath;
   }
 
-  readProjectFile(p: string, options: any = {}) {
+  readProjectFile(p: string, options: { json?: boolean; fallback?: any } = {}) {
     options = options || {};
     try {
       const content = fs.readFileSync(this.path(p), "utf8");
@@ -252,8 +251,47 @@ export class Config {
     return fs.existsSync(this.path(p));
   }
 
+  projectDirExists(p: string): boolean {
+    return this.projectFileExists(p) && fs.statSync(this.path(p)).isDirectory();
+  }
+
   deleteProjectFile(p: string) {
     fs.removeSync(this.path(p));
+  }
+
+  deleteProjectDir(p: string) {
+    if (path.isAbsolute(p)) {
+      throw new FirebaseError(
+        `Sanity: deleteProjectDir() should not be called with an absolute path.`,
+      );
+    }
+    const resolvedPath = this.path(p);
+    if (!fs.existsSync(resolvedPath)) {
+      throw new FirebaseError(`Failed to delete project directory ${p}: directory doesn't exist.`);
+    }
+    try {
+      fs.rmSync(resolvedPath, { recursive: true });
+    } catch (err: unknown) {
+      throw new FirebaseError(`Failed to delete project directory ${p}: ${err}`, {
+        original: err instanceof Error ? err : undefined,
+      });
+    }
+  }
+
+  lsProjectDir(p: string): fs.Dirent[] {
+    const resolvedPath = this.path(p);
+    if (!fs.existsSync(resolvedPath)) {
+      throw new FirebaseError(
+        `Failed to list files in project directory ${p}: directory doesn't exist.`,
+      );
+    }
+    try {
+      return fs.readdirSync(resolvedPath, { withFileTypes: true });
+    } catch (err: unknown) {
+      throw new FirebaseError(`Failed to list files in project directory ${p}: ${err}`, {
+        original: err instanceof Error ? err : undefined,
+      });
+    }
   }
 
   async confirmWriteProjectFile(
@@ -274,6 +312,7 @@ export class Config {
     const shouldWrite = await confirm({
       message: "File " + clc.underline(path) + " already exists. Overwrite?",
       default: !!confirmByDefault,
+      nonInteractive: this.options.nonInteractive,
     });
     if (!shouldWrite) {
       utils.logBullet("Skipping write of " + clc.bold(path));
@@ -297,13 +336,24 @@ export class Config {
     this.writeProjectFile(path, content);
   }
 
-  public static load(options: any, allowMissing?: boolean): Config | null {
+  public static load(options: { cwd?: string; configPath?: string }, allowMissing?: false): Config;
+  public static load(
+    options: { cwd?: string; configPath?: string },
+    allowMissing: true,
+  ): Config | null;
+  public static load(
+    options: { cwd?: string; configPath?: string },
+    allowMissing?: boolean,
+  ): Config | null {
     const pd = detectProjectRoot(options);
     const filename = options.configPath || Config.FILENAME;
     if (pd) {
       try {
         const filePath = path.resolve(pd, path.basename(filename));
-        const data = cjson.load(filePath);
+        let data: unknown = {};
+        if (fs.statSync(filePath).size > 0) {
+          data = loadCJSON(filePath);
+        }
 
         // Validate config against JSON Schema. For now we just print these to debug
         // logs but in a future CLI version they could be warnings and/or errors.

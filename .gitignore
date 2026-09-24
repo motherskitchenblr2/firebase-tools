@@ -19,6 +19,8 @@ test_output.log
 scripts/emulator-tests/functions/index.js
 yarn.lock
 .npmrc
+.eslintcache
+*.tsbuildinfo
 
 .DS_Store
 .idea
@@ -30,3 +32,8 @@ lib/
 dev/
 clean/
 .gemini/
+.env
+
+# Dart/Flutter
+.dart_tool/
+**/pubspec.lock
